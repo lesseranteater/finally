@@ -55,14 +55,14 @@ The user runs a single Docker command (or a provided start script). A browser op
 │  ├── /api/*          REST endpoints             │
 │  ├── /api/stream/*   SSE streaming              │
 │  └── /*              Static file serving         │
-│                      (Next.js export)            │
+│                      (SvelteKit static build)    │
 │                                                 │
 │  SQLite database (volume-mounted)               │
 │  Background task: market data polling/sim        │
 └─────────────────────────────────────────────────┘
 ```
 
-- **Frontend**: Next.js with TypeScript, built as a static export (`output: 'export'`), served by FastAPI as static files
+- **Frontend**: SvelteKit (Svelte 5, runes mode) with strict TypeScript, built with `@sveltejs/adapter-static` into `frontend/build/` as a client-rendered SPA (`index.html` fallback), served by FastAPI as static files
 - **Backend**: FastAPI (Python), managed as a `uv` project
 - **Database**: SQLite, single file at `db/finally.db`, volume-mounted for persistence
 - **Real-time data**: Server-Sent Events (SSE) — simpler than WebSockets, one-way server→client push, works everywhere
@@ -74,7 +74,7 @@ The user runs a single Docker command (or a provided start script). A browser op
 | Decision | Rationale |
 |---|---|
 | SSE over WebSockets | One-way push is all we need; simpler, no bidirectional complexity, universal browser support |
-| Static Next.js export | Single origin, no CORS issues, one port, one container, simple deployment |
+| Static SvelteKit build (adapter-static) | Single origin, no CORS issues, one port, one container, simple deployment |
 | SQLite over Postgres | No auth = no multi-user = no need for a database server; self-contained, zero config |
 | Single Docker container | Students run one command; no docker-compose for production, no service orchestration |
 | uv for Python | Fast, modern Python project management; reproducible lockfile; what students should learn |
@@ -86,7 +86,7 @@ The user runs a single Docker command (or a provided start script). A browser op
 
 ```
 finally/
-├── frontend/                 # Next.js TypeScript project (static export)
+├── frontend/                 # SvelteKit TypeScript project (static build to build/)
 ├── backend/                  # FastAPI uv project (Python)
 │   └── db/                   # Schema definitions, seed data, migration logic
 ├── planning/                 # Project-wide documentation for agents
@@ -108,7 +108,7 @@ finally/
 
 ### Key Boundaries
 
-- **`frontend/`** is a self-contained Next.js project. It knows nothing about Python. It talks to the backend via `/api/*` endpoints and `/api/stream/*` SSE endpoints. Internal structure is up to the Frontend Engineer agent.
+- **`frontend/`** is a self-contained SvelteKit project. It knows nothing about Python. It talks to the backend via `/api/*` endpoints and `/api/stream/*` SSE endpoints. Pages and layouts live in `src/routes/`, shared code in `src/lib/`. The static adapter and forced runes mode are configured in `vite.config.ts` (no `svelte.config.js`). Further internal structure is up to the Frontend Engineer agent. See "Frontend Conventions" in section 10.
 - **`backend/`** is a self-contained uv project with its own `pyproject.toml`. It owns all server logic including database initialization, schema, seed data, API routes, SSE streaming, market data, and LLM integration. Internal structure is up to the Backend/Market Data agents.
 - **`backend/db/`** contains schema SQL definitions and seed logic. The backend lazily initializes the database on first request — creating tables and seeding default data if the SQLite file doesn't exist or is empty.
 - **`db/`** at the top level is the runtime volume mount point. The SQLite file (`db/finally.db`) is created here by the backend and persists across container restarts via Docker volume.
@@ -364,10 +364,25 @@ The frontend is a single-page application with a dense, terminal-inspired layout
 ### Technical Notes
 
 - Use `EventSource` for SSE connection to `/api/stream/prices`
-- Canvas-based charting library preferred (Lightweight Charts or Recharts) for performance
+- Canvas-based charting library preferred (Lightweight Charts) for performance; it is framework-agnostic, so mount it from `onMount` and dispose it on cleanup
 - Price flash effect: on receiving a new price, briefly apply a CSS class with background color transition, then remove it
 - All API calls go to the same origin (`/api/*`) — no CORS configuration needed
 - Tailwind CSS for styling with a custom dark theme
+
+### Frontend Conventions
+
+Adopted from the prelegal app's `frontend/AGENTS.md`:
+
+- SvelteKit, Svelte 5, strict TypeScript; dependencies via npm
+- Pages and layouts in `src/routes/`, shared code in `src/lib/`
+- Static adapter (`adapter-static`, `fallback: 'index.html'`) and forced runes mode are configured in `vite.config.ts`; there is no `svelte.config.js`
+- Client-rendered SPA: access browser APIs (`EventSource`, `fetch`, chart libraries) only in browser-only lifecycle code, typically `onMount`
+- Use runes (`$state`, `$derived`, `$effect`) for reactive state; use DOM event properties such as `onclick` rather than legacy `on:` directives
+- Prefer semantic HTML, native controls, visible focus, and descriptive labels
+- Validate user input (trade ticker/quantity, watchlist ticker) before sending it to the backend
+- Keep secrets and privileged code out of the frontend; the OpenRouter and Massive keys live only in the backend
+- Never use `{@html}` on an unescaped string; render chat messages as text
+- Verification, run from `frontend/`: `npm install`, `npm run dev`, `npm run check`, `npm test` (vitest), `npm run build` (static output in `build/`)
 
 ---
 
@@ -376,15 +391,16 @@ The frontend is a single-page application with a dense, terminal-inspired layout
 ### Multi-Stage Dockerfile
 
 ```
-Stage 1: Node 20 slim
-  - Copy frontend/
-  - npm install && npm run build (produces static export)
+Stage 1: Node 22 slim
+  - Copy frontend/package.json and package-lock.json, npm ci
+  - Copy the rest of frontend/
+  - npm run build (produces static output in frontend/build/)
 
 Stage 2: Python 3.12 slim
   - Install uv
   - Copy backend/
   - uv sync (install Python dependencies from lockfile)
-  - Copy frontend build output into a static/ directory
+  - Copy frontend/build into the image (e.g. /app/frontend/build) and point FastAPI at it via a FRONTEND_DIR environment variable
   - Expose port 8000
   - CMD: uvicorn serving FastAPI app
 ```
@@ -433,7 +449,7 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 - LLM: structured output parsing handles all valid schemas, graceful handling of malformed responses, trade validation within chat flow
 - API routes: correct status codes, response shapes, error handling
 
-**Frontend (React Testing Library or similar)**:
+**Frontend (vitest, plus @testing-library/svelte for components)**:
 - Component rendering with mock data
 - Price flash animation triggers correctly on price changes
 - Watchlist CRUD operations

@@ -17,7 +17,7 @@ Built entirely by coding agents as a capstone project for an agentic AI coding c
 
 Single Docker container serving everything on port 8000:
 
-- **Frontend**: Next.js (static export) with TypeScript and Tailwind CSS
+- **Frontend**: SvelteKit (static build) with TypeScript and Tailwind CSS
 - **Backend**: FastAPI (Python/uv) with SSE streaming
 - **Database**: SQLite with lazy initialization
 - **AI**: LiteLLM → OpenRouter (Cerebras inference) with structured outputs
@@ -49,7 +49,7 @@ docker run -v finally-data:/app/db -p 8000:8000 --env-file .env finally
 
 ```
 finally/
-├── frontend/    # Next.js static export
+├── frontend/    # SvelteKit static build
 ├── backend/     # FastAPI uv project
 ├── planning/    # Project documentation and agent contracts
 ├── test/        # Playwright E2E tests
