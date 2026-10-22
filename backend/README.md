@@ -15,14 +15,15 @@ FastAPI backend for the FinAlly AI Trading Workstation.
     - `stream.py` - SSE streaming endpoint
     - `seed_prices.py` - Default ticker prices and parameters
 
+- `market_data_demo.py` - Live terminal dashboard of the simulator (`uv run market_data_demo.py`)
 - `tests/` - Unit and integration tests
-  - `market/` - Market data tests
+  - `market/` - Market data tests (cache, factory, models, simulator, Massive client)
 
 ## Running Tests
 
 ```bash
 # Install dependencies
-uv sync --dev
+uv sync --extra dev
 
 # Run all tests
 uv run pytest
@@ -45,7 +46,7 @@ uv run pytest -v
 
 ```bash
 # Install dependencies
-uv sync --dev
+uv sync --extra dev
 
 # Run linter
 uv run ruff check .

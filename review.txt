@@ -1,0 +1,11 @@
+[P1] Do not run a repository-mutating review on every Stop event
+Location: .claude/settings.json:6
+
+The new Stop hook invokes `codex exec` at every Claude session termination,
+and its prompt instructs Codex to write `review.txt` with no explicit output
+path. Ordinary session stops will therefore create or overwrite a file in the
+current working directory (the repository root here), dirtying the worktree
+and potentially replacing a user's review output. Make this review opt-in, or
+write any automatic output to a temporary location outside the repository.
+
+No other correctness issues found in the README changes.
